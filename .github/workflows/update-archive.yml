@@ -22,14 +22,13 @@ jobs:
 
       - name: アーカイブを再ビルド
         run: |
-          pip install --quiet Pillow
-          python build_pad_archive.py --remote out
-          python build_archive_html.py out/archive.json.gz out/pad_skill_archive.html mycategories.json awoken.png
+          python build_pad_archive.py --remote docs
+          python build_archive_html.py docs/archive.json.gz docs/pad_skill_archive.html mycategories.json awoken.png
 
       - name: 中身が変わっているか確認
         id: diff
         run: |
-          if [ -z "$(git status --porcelain out/)" ]; then
+          if git diff --quiet -- docs/pad_skill_archive.html; then
 
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "変更なし"
@@ -51,7 +50,6 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add out/
+          git add docs/
           git commit -m "スキルアーカイブ更新 $(date -u +%Y-%m-%d)"
           git push
-
