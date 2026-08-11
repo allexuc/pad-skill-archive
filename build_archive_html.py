@@ -361,6 +361,54 @@ TEMPLATE = r"""<!DOCTYPE html>
   }
   .awchip em { font-style: normal; opacity: .65; font-family: var(--mono); font-size: 10px; }
 
+  /* スキルタブから覚醒で絞るための引き出し */
+  .awpick {
+    padding: 10px 20px 12px; border-bottom: 1px solid var(--line);
+    background: rgba(111,168,255,.05);
+  }
+  .awpick[hidden] { display: none; }
+  .awpick-head {
+    display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin-bottom: 9px;
+  }
+  .awpick-head input {
+    font-family: var(--jp); font-size: 12.5px; color: var(--ink);
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 7px; padding: 6px 10px; width: 190px;
+  }
+  .awpick-head input:focus { border-color: var(--focus); outline: none; }
+  .awpick-note { font-size: 11px; color: var(--muted); }
+  .awpick-list {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    max-height: 172px; overflow-y: auto;
+  }
+  .awpick-list .none { font-size: 11.5px; color: var(--muted); padding: 4px; }
+
+  /* 統合タブの行: 1行 = キャラ */
+  .crow { padding: 15px 20px; border-bottom: 1px solid rgba(44,51,85,.55); }
+  .crow:hover { background: rgba(31,37,64,.32); }
+  .crow-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .crow-aw { margin: 9px 0 10px; }
+  .uni { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .uni-block {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 9px; padding: 10px 12px;
+  }
+  .uni-block.is-empty { opacity: .5; }
+  .uni-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .uni-label {
+    font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em;
+    color: var(--muted); border: 1px solid var(--line);
+    border-radius: 4px; padding: 1px 5px;
+  }
+  .uni-label.is-leader { color: var(--light); border-color: rgba(224,179,43,.4); }
+  .uni-id { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+  .uni-name { font-size: 13.5px; font-weight: 700; margin-bottom: 5px; }
+  .uni-desc { font-size: 13px; line-height: 1.62; color: #D2D7EA; }
+  .uni-desc mark, .uni-name mark, .mrow-name mark {
+    background: rgba(111,168,255,.26); color: var(--ink); border-radius: 3px; padding: 0 2px;
+  }
+  .uni-empty { font-size: 12px; color: var(--muted); }
+
   /* 覚醒タブの行 */
   .mrow {
     padding: 13px 20px; border-bottom: 1px solid rgba(44,51,85,.55);
@@ -417,12 +465,16 @@ TEMPLATE = r"""<!DOCTYPE html>
     .notepanel { padding: 12px 14px; }
     .cats { padding: 0 14px 12px; }
     .row { padding: 12px 14px; grid-template-columns: 12px 1fr; gap: 11px; }
+    .crow { padding: 13px 14px; }
     .vintage { width: 100%; margin-left: 0; }
     .search { font-size: 16px; }
     .tabs button { flex: 1; padding: 10px 6px; font-size: 13px; }
     .mycats { padding: 9px 14px; }
     #mcName, #mcPattern { flex: 1 1 100%; width: auto; }
     .mc-form { gap: 6px; }
+  }
+  @media (max-width: 880px) {
+    .uni { grid-template-columns: 1fr; }
   }
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -437,9 +489,9 @@ TEMPLATE = r"""<!DOCTYPE html>
 
 <header class="masthead">
   <div class="tabs" role="tablist" id="tabs">
-    <button role="tab" data-tab="active" aria-selected="true">アクティブスキル<span class="n" id="nActive">–</span></button>
+    <button role="tab" data-tab="chars" aria-selected="true">キャラ<span class="n" id="nChars">–</span></button>
+    <button role="tab" data-tab="active" aria-selected="false">アクティブスキル<span class="n" id="nActive">–</span></button>
     <button role="tab" data-tab="leader" aria-selected="false">リーダースキル<span class="n" id="nLeader">–</span></button>
-    <button role="tab" data-tab="awoken" aria-selected="false">覚醒<span class="n" id="nAwoken">–</span></button>
   </div>
 
   <div class="search-wrap">
@@ -462,6 +514,10 @@ TEMPLATE = r"""<!DOCTYPE html>
         <button class="orb orb-dark"  data-attr="dark"  aria-pressed="false" aria-label="闇"></button>
         <button class="orb orb-heal"  data-attr="heal"  aria-pressed="false" aria-label="回復"></button>
       </div>
+    </div>
+
+    <div class="group" id="awPickGroup">
+      <button class="btn" id="awPickToggle" type="button">覚醒で絞る</button>
     </div>
 
     <div class="group" id="assistGroup">
@@ -523,7 +579,14 @@ TEMPLATE = r"""<!DOCTYPE html>
   </dl>
 </div>
 
-<div class="awbar" id="awbar" hidden></div>
+<div class="awpick" id="awpick" hidden>
+  <div class="awpick-head">
+    <input id="awFilter" type="search" autocomplete="off" placeholder="覚醒名で絞り込む">
+    <span class="awpick-note">選んだ覚醒を<b>すべて持つキャラ</b>が所持しているスキルに絞ります</span>
+    <button class="btn" id="awPickClear" type="button">覚醒の選択を解除</button>
+  </div>
+  <div class="awpick-list" id="awpickList"></div>
+</div>
 
 <div class="cats" id="cats"></div>
 
@@ -575,22 +638,24 @@ TEMPLATE = r"""<!DOCTYPE html>
   var CHUNK = 60, MON_LIMIT = 8;
 
   var DATA = null, MONS = null;
-  var tab = "active";
+  var tab = "chars";
   var view = [], shown = 0;
   var expanded = {};   // 所持キャラを全部展開にした行
 
   // タブごとに条件を持つ。アクティブとリーダーは別物として扱う。
   var S = {
-    active: { q:"", attrs:[], cats:[], my:[], cdMax:30, assist:"any", sort:"newest" },
-    leader: { q:"", attrs:[], cats:[], my:[], multMin:0, assist:"any", sort:"newest" },
-    awoken: { q:"", attrs:[], cats:[], my:[], aw:[], sort:"newest" }
+    active: { q:"", attrs:[], cats:[], my:[], aw:[], cdMax:30, assist:"any", sort:"newest" },
+    leader: { q:"", attrs:[], cats:[], my:[], aw:[], multMin:0, assist:"any", sort:"newest" },
+    chars:  { q:"", attrs:[], cats:[], my:[], aw:[], cdMax:30, multMin:0,
+              assist:"any", sort:"newest" }
   };
 
   var el = {};
   ["q","cats","scroller","viewport","state","stamp","hits","sort",
    "cdMax","cdOut","multMin","multOut","cdGroup","multGroup",
    "nActive","nLeader","toggleCats",
-   "notePanel","noteToggle","awbar","nAwoken","assistGroup",
+   "notePanel","noteToggle","assistGroup","nChars",
+   "awpick","awpickList","awFilter","awPickToggle","awPickClear","awPickGroup",
    "mycatChips","mcAdd","mcForm","mcName","mcPattern","mcScope","mcPreview",
    "mcSave","mcCancel","mcHint","mcIo","mcIoToggle","mcJson","mcLoad"].forEach(function (id) {
     el[id] = document.getElementById(id);
@@ -621,9 +686,12 @@ TEMPLATE = r"""<!DOCTYPE html>
     return mc._re.test(r[2]) || mc._re.test(r[1]);
   }
 
-  function visibleMy() {
-    return MYCATS.filter(function (mc) { return mc.scope === "both" || mc.scope === tab; });
+  function myInScope(mc) {
+    // 統合タブは両方のスキルを持つ行なので、どのスコープも対象になる
+    return tab === "chars" || mc.scope === "both" || mc.scope === tab;
   }
+
+  function visibleMy() { return MYCATS.filter(myInScope); }
 
   function countMy(mc) {
     var n = 0, rows;
@@ -666,7 +734,7 @@ TEMPLATE = r"""<!DOCTYPE html>
   function renderMyCats() {
     var html = "";
     MYCATS.forEach(function (mc, i) {
-      if (mc.scope !== "both" && mc.scope !== tab) return;
+      if (!myInScope(mc)) return;
       var on = S[tab].my.indexOf(i) !== -1;
       html += '<span class="mycat" aria-pressed="' + on + '">' +
                 '<button class="mc-on" data-i="' + i + '">' +
@@ -676,6 +744,100 @@ TEMPLATE = r"""<!DOCTYPE html>
               "</span>";
     });
     el.mycatChips.innerHTML = html;
+  }
+
+  // 図鑑番号 -> その子が持つ覚醒の集合。スキル側から覚醒で絞るのに使う。
+  var MON_AW = null;
+
+  function buildMonAw() {
+    MON_AW = new Map();
+    DATA.awoken.forEach(function (m) {
+      var set = new Set(m[3]);
+      for (var i = 0; i < m[4].length; i++) set.add(m[4][i]);
+      MON_AW.set(m[0], set);
+    });
+  }
+
+  // 「選んだ覚醒をすべて持つキャラ」が1体でも所持していればそのスキルを残す
+  function skillHasAwakenings(r, want) {
+    for (var i = 0; i < r[7].length; i++) {
+      var set = MON_AW.get(r[7][i]);
+      if (!set) continue;
+      var all = true;
+      for (var j = 0; j < want.length; j++) {
+        if (!set.has(want[j])) { all = false; break; }
+      }
+      if (all) return true;
+    }
+    return false;
+  }
+
+  // 引き出しに出す件数は「そのタブで何件のスキルが該当するか」。
+  // 8,774件×所持キャラ×覚醒 を毎回なぞると1秒近くかかるのでタブ単位で覚えておく。
+  var awCountCache = {};
+
+  function awSkillCounts() {
+    if (awCountCache[tab]) return awCountCache[tab];
+    var counts = {};
+    var rows = DATA[tab];
+
+    if (tab === "chars") {
+      // 統合タブは行がキャラなので、そのキャラ自身の覚醒をそのまま数える
+      for (var c = 0; c < rows.length; c++) {
+        var seenC = {};
+        rows[c][3].concat(rows[c][4]).forEach(function (a) {
+          if (seenC[a]) return;
+          seenC[a] = 1;
+          counts[a] = (counts[a] || 0) + 1;
+        });
+      }
+      awCountCache[tab] = counts;
+      return counts;
+    }
+
+    for (var i = 0; i < rows.length; i++) {
+      var seen = {};
+      var mons = rows[i][7];
+      for (var h = 0; h < mons.length; h++) {
+        var set = MON_AW.get(mons[h]);
+        if (!set) continue;
+        set.forEach(function (a) {
+          if (seen[a]) return;
+          seen[a] = 1;
+          counts[a] = (counts[a] || 0) + 1;
+        });
+      }
+    }
+    awCountCache[tab] = counts;
+    return counts;
+  }
+
+  function renderAwPick() {
+    if (tab === "chars") { /* 統合タブでも使う */ }
+    var counts = awSkillCounts();
+    var needle = el.awFilter.value.trim();
+    var sel = S[tab].aw;
+    var ids = Object.keys(counts).map(Number)
+      .filter(function (id) { return !needle || awName(id).indexOf(needle) !== -1; })
+      .sort(function (a, b) { return counts[b] - counts[a]; });
+
+    if (!ids.length) {
+      el.awpickList.innerHTML = '<span class="none">該当する覚醒がありません。</span>';
+      return;
+    }
+    var html = "";
+    ids.forEach(function (id) {
+      html += '<button class="awchip" type="button" aria-pressed="' +
+              (sel.indexOf(id) !== -1) + '" data-awp="' + id + '">' +
+              awIcon(id, true) + "<span>" + escapeHtml(awName(id)) + "</span>" +
+              "<em>" + counts[id].toLocaleString() + "</em></button>";
+    });
+    el.awpickList.innerHTML = html;
+  }
+
+  function syncAwPickLabel() {
+    var n = S[tab].aw.length;
+    el.awPickToggle.textContent = n ? "覚醒 " + n + " 件で絞り込み中" : "覚醒で絞る";
   }
 
   // 覚醒アシストを持つキャラはアシスト運用されるので、素早く引けるよう集合にしておく
@@ -701,45 +863,182 @@ TEMPLATE = r"""<!DOCTYPE html>
     return n ? n : "覚醒 #" + id;
   }
 
-  function buildAwChips() {
-    var counts = {};
-    DATA.awoken.forEach(function (m) {
-      var seen = {};
-      m[3].concat(m[4]).forEach(function (a) {
-        if (seen[a]) return;
-        seen[a] = 1;
-        counts[a] = (counts[a] || 0) + 1;
+
+
+  // ================= 統合（1行 = キャラ） =================
+  // アクティブ・リーダー・覚醒はデータ上どれもモンスターにぶら下がっているので、
+  // 行をキャラに揃えれば3つを同時に絞り込める。
+  var UNI_CATS = [];
+
+  function buildChars() {
+    var byActive = new Map(), byLeader = new Map();
+    DATA.active.forEach(function (r, i) { r[7].forEach(function (m) { byActive.set(m, i); }); });
+    DATA.leader.forEach(function (r, i) { r[7].forEach(function (m) { byLeader.set(m, i); }); });
+
+    var aw = new Map();
+    DATA.awoken.forEach(function (m) { aw.set(m[0], m); });
+
+    // カテゴリはアクティブ側とリーダー側で語彙が別なので、名前で1本にまとめる
+    UNI_CATS = [];
+    var idx = {};
+    ["active", "leader"].forEach(function (k) {
+      DATA.cats[k].forEach(function (n) {
+        if (!(n in idx)) { idx[n] = UNI_CATS.length; UNI_CATS.push(n); }
       });
     });
-    var ids = Object.keys(counts).map(Number).sort(function (a, b) { return counts[b] - counts[a]; });
-    var html = "";
-    ids.forEach(function (id) {
-      var on = S.awoken.aw.indexOf(id) !== -1;
-      html += '<button class="awchip" type="button" aria-pressed="' + on + '" data-aw="' + id + '">' +
-              awIcon(id, true) + "<span>" + escapeHtml(awName(id)) + "</span>" +
-              "<em>" + counts[id].toLocaleString() + "</em></button>";
-    });
-    el.awbar.innerHTML = html;
+    var mapA = DATA.cats.active.map(function (n) { return idx[n]; });
+    var mapL = DATA.cats.leader.map(function (n) { return idx[n]; });
+
+    DATA.chars = Object.keys(DATA.mons).map(function (k) {
+      var id = Number(k), m = DATA.mons[k], a = aw.get(id);
+      var ai = byActive.has(id) ? byActive.get(id) : -1;
+      var li = byLeader.has(id) ? byLeader.get(id) : -1;
+      var cats = [];
+      function push(u) { if (cats.indexOf(u) === -1) cats.push(u); }
+      if (ai >= 0) DATA.active[ai][4].forEach(function (c) { push(mapA[c]); });
+      if (li >= 0) DATA.leader[li][4].forEach(function (c) { push(mapL[c]); });
+      // [図鑑番号, 名前, 属性, 覚醒, 超覚醒, アクティブ行, リーダー行, カテゴリ]
+      return [id, m[0], m[1], a ? a[3] : [], a ? a[4] : [], ai, li, cats];
+    }).sort(function (x, y) { return y[0] - x[0]; });
   }
 
-  function monRowHtml(m) {
+  function charMatchesText(r, q) {
+    if (r[1].indexOf(q) !== -1) return true;
+    var a = r[5] >= 0 ? DATA.active[r[5]] : null;
+    if (a && (a[2].indexOf(q) !== -1 || a[10].indexOf(q) !== -1 || a[1].indexOf(q) !== -1)) return true;
+    var l = r[6] >= 0 ? DATA.leader[r[6]] : null;
+    if (l && (l[2].indexOf(q) !== -1 || l[10].indexOf(q) !== -1 || l[1].indexOf(q) !== -1)) return true;
+    return false;
+  }
+
+  function applyChars() {
+    var s = S.chars;
+    var q = s.q.trim();
+    var isNum = /^\d+$/.test(q);
+    var qBare = q.replace(/[\[\]]/g, "");
+    var out = [];
+
+    for (var i = 0; i < DATA.chars.length; i++) {
+      var r = DATA.chars[i];
+
+      if (s.attrs.length) {
+        var ok = true;
+        for (var a = 0; a < s.attrs.length; a++) {
+          if (r[2].indexOf(s.attrs[a]) === -1) { ok = false; break; }
+        }
+        if (!ok) continue;
+      }
+
+      if (s.aw.length) {
+        var oka = true;
+        for (var w = 0; w < s.aw.length; w++) {
+          if (r[3].indexOf(s.aw[w]) === -1 && r[4].indexOf(s.aw[w]) === -1) { oka = false; break; }
+        }
+        if (!oka) continue;
+      }
+
+      if (s.cats.length) {
+        var okc = true;
+        for (var c = 0; c < s.cats.length; c++) {
+          if (r[7].indexOf(s.cats[c]) === -1) { okc = false; break; }
+        }
+        if (!okc) continue;
+      }
+
+      if (s.assist !== "any") {
+        var hasA = isAssist(r[0]);
+        if (s.assist === "only" && !hasA) continue;
+        if (s.assist === "not" && hasA) continue;
+      }
+
+      if (s.cdMax < 30) {
+        if (r[5] < 0 || DATA.active[r[5]][3] > s.cdMax) continue;
+      }
+      if (s.multMin > 0) {
+        if (r[6] < 0 || !(DATA.leader[r[6]][6] >= s.multMin)) continue;
+      }
+
+      if (s.my.length) {
+        var okm = true;
+        for (var mi = 0; mi < s.my.length; mi++) {
+          var mc = MYCATS[s.my[mi]];
+          var hit = (r[5] >= 0 && matchMy(mc, DATA.active[r[5]])) ||
+                    (r[6] >= 0 && matchMy(mc, DATA.leader[r[6]]));
+          if (!hit) { okm = false; break; }
+        }
+        if (!okm) continue;
+      }
+
+      if (q) {
+        if (isNum) { if (String(r[0]) !== q) continue; }
+        else if (!charMatchesText(r, q) && !charMatchesText(r, qBare)) continue;
+      }
+
+      out.push(r);
+    }
+
+    if (s.sort === "oldest") out.sort(function (x, y) { return x[0] - y[0]; });
+    else if (s.sort === "holders") out.sort(function (x, y) {
+      return (y[3].length + y[4].length) - (x[3].length + x[4].length) || y[0] - x[0];
+    });
+    else if (s.sort === "skill") out.sort(function (x, y) {
+      var cx = x[5] >= 0 ? DATA.active[x[5]][3] : 99;
+      var cy = y[5] >= 0 ? DATA.active[y[5]][3] : 99;
+      return cx - cy || y[0] - x[0];
+    });
+    else out.sort(function (x, y) { return y[0] - x[0]; });
+
+    view = out;
+    el.hits.textContent = out.length.toLocaleString() + " 体";
+    if (!out.length) {
+      showState("該当なし", "条件をゆるめるか、別の言い回しを試してください。");
+      return;
+    }
+    hideState();
+    window.scrollTo(0, 0);
+    render();
+  }
+
+  function skillBlock(r, kind) {
+    var isL = kind === "leader";
+    if (!r) {
+      return '<div class="uni-block is-empty"><span class="uni-label' +
+             (isL ? " is-leader" : "") + '">' + (isL ? "LEADER" : "ACTIVE") +
+             '</span><div class="uni-empty">なし</div></div>';
+    }
+    var meta = isL
+      ? (r[6] ? '<span class="row-cd">最大 ×' + r[6] + "</span>" : "")
+      : (r[3] ? '<span class="row-cd">初期CD ' + r[3] + "</span>" : "");
+    return '<div class="uni-block">' +
+      '<div class="uni-top"><span class="uni-label' + (isL ? " is-leader" : "") + '">' +
+        (isL ? "LEADER" : "ACTIVE") + "</span>" +
+        '<span class="uni-id">#' + r[0] + "</span>" + meta + "</div>" +
+      '<div class="uni-name">' + highlight(r[1] || "(名称なし)") + "</div>" +
+      '<div class="uni-desc">' + highlight(r[2]) + "</div></div>";
+  }
+
+  function charRowHtml(r) {
     var dots = "";
-    for (var i = 0; i < m[2].length; i++) {
-      dots += '<b style="background:' + ATTR_COLOR[m[2][i]] + '"></b>';
+    for (var i = 0; i < r[2].length; i++) {
+      dots += '<b style="background:' + ATTR_COLOR[r[2][i]] + '"></b>';
     }
     var aw = "";
-    for (var j = 0; j < m[3].length; j++) aw += awIcon(m[3][j]);
+    for (var j = 0; j < r[3].length; j++) aw += awIcon(r[3][j]);
     var sup = "";
-    for (var k = 0; k < m[4].length; k++) sup += awIcon(m[4][k]);
+    for (var k = 0; k < r[4].length; k++) sup += awIcon(r[4][k]);
 
-    return '<div class="mrow">' +
-      '<div class="mrow-head">' +
+    return '<div class="crow">' +
+      '<div class="crow-head">' +
         '<span class="mrow-attrs">' + dots + "</span>" +
-        '<span class="mrow-id">No.' + m[0] + "</span>" +
-        '<span class="mrow-name">' + highlight(m[1]) + "</span>" +
+        '<span class="mrow-id">No.' + r[0] + "</span>" +
+        '<span class="mrow-name">' + highlight(r[1]) + "</span>" +
+        (isAssist(r[0]) ? '<span class="assist-mark">アシスト</span>' : "") +
       "</div>" +
-      '<div class="aw-row">' + aw +
-        (sup ? '<span class="aw-super">' + sup + "</span>" : "") +
+      (aw || sup ? '<div class="aw-row crow-aw">' + aw +
+        (sup ? '<span class="aw-super">' + sup + "</span>" : "") + "</div>" : "") +
+      '<div class="uni">' +
+        skillBlock(r[5] >= 0 ? DATA.active[r[5]] : null, "active") +
+        skillBlock(r[6] >= 0 ? DATA.leader[r[6]] : null, "leader") +
       "</div></div>";
   }
 
@@ -768,6 +1067,9 @@ TEMPLATE = r"""<!DOCTYPE html>
       DATA = JSON.parse(txt);
       MONS = DATA.mons;
       ASSIST = new Set(DATA.assist || []);
+      buildMonAw();
+      buildChars();
+      el.nChars.textContent = DATA.chars.length.toLocaleString();
 
       // 検索用にキャラ名をあらかじめ連結しておく
       ["active","leader"].forEach(function (k) {
@@ -786,7 +1088,6 @@ TEMPLATE = r"""<!DOCTYPE html>
 
       el.nActive.textContent = DATA.active.length.toLocaleString();
       el.nLeader.textContent = DATA.leader.length.toLocaleString();
-      el.nAwoken.textContent = Object.keys(DATA.awnames).length.toLocaleString();
       el.stamp.textContent = "モンスター " + Object.keys(MONS).length.toLocaleString() + " 体";
       loadMy();
       renderMyCats();
@@ -797,10 +1098,12 @@ TEMPLATE = r"""<!DOCTYPE html>
   }
 
   function buildCats() {
-    var names = DATA.cats[tab];
+    var isChars = tab === "chars";
+    var names = isChars ? UNI_CATS : DATA.cats[tab];
     var counts = new Array(names.length).fill(0);
     DATA[tab].forEach(function (r) {
-      for (var i = 0; i < r[4].length; i++) counts[r[4][i]]++;
+      var list = isChars ? r[7] : r[4];
+      for (var i = 0; i < list.length; i++) counts[list[i]]++;
     });
     var order = names.map(function (n, i) { return { n:n, i:i, c:counts[i] }; })
                      .sort(function (a, b) { return b.c - a.c; });
@@ -839,56 +1142,9 @@ TEMPLATE = r"""<!DOCTYPE html>
     return list;
   }
 
-  function applyAwoken() {
-    var s = S.awoken;
-    var q = s.q.trim();
-    var isNum = /^\d+$/.test(q);
-    var out = [];
-
-    for (var i = 0; i < DATA.awoken.length; i++) {
-      var m = DATA.awoken[i];
-
-      if (s.attrs.length) {
-        var ok = true;
-        for (var a = 0; a < s.attrs.length; a++) {
-          if (m[2].indexOf(s.attrs[a]) === -1) { ok = false; break; }
-        }
-        if (!ok) continue;
-      }
-
-      if (s.aw.length) {
-        var oka = true;
-        for (var w = 0; w < s.aw.length; w++) {
-          if (m[3].indexOf(s.aw[w]) === -1 && m[4].indexOf(s.aw[w]) === -1) { oka = false; break; }
-        }
-        if (!oka) continue;
-      }
-
-      if (q) {
-        if (isNum) { if (String(m[0]) !== q) continue; }
-        else if (m[1].indexOf(q) === -1) continue;
-      }
-
-      out.push(m);
-    }
-
-    if (s.sort === "oldest") out.sort(function (x, y) { return x[0] - y[0]; });
-    else if (s.sort === "holders") out.sort(function (x, y) { return y[3].length - x[3].length || y[0] - x[0]; });
-    else out.sort(function (x, y) { return y[0] - x[0]; });
-
-    view = out;
-    el.hits.textContent = out.length.toLocaleString() + " 体";
-    if (!out.length) {
-      showState("該当なし", "覚醒の組み合わせを緩めるか、キャラ名の綴りを確かめてください。");
-      return;
-    }
-    hideState();
-    window.scrollTo(0, 0);
-    render();
-  }
 
   function apply() {
-    if (tab === "awoken") { applyAwoken(); return; }
+    if (tab === "chars") { applyChars(); return; }
     var s = S[tab];
     var rows = DATA[tab];
     var q = s.q.trim();
@@ -925,6 +1181,8 @@ TEMPLATE = r"""<!DOCTYPE html>
         }
         if (!okm) continue;
       }
+
+      if (s.aw.length && !skillHasAwakenings(r, s.aw)) continue;
 
       if (s.assist !== "any") {
         var hasA = skillHasAssist(r);
@@ -1044,7 +1302,7 @@ TEMPLATE = r"""<!DOCTYPE html>
         pinPanel += '<span class="empty">まだマイカテゴリがありません。上の「＋ 追加」から作れます。</span>';
       } else {
         MYCATS.forEach(function (mc, i) {
-          if (mc.scope !== "both" && mc.scope !== tab) return;
+          if (!myInScope(mc)) return;
           var has = mc.ids.indexOf(r[0]) !== -1;
           pinPanel += '<button data-put="' + i + '" data-sid="' + r[0] +
                       '" aria-pressed="' + has + '">' + escapeHtml(mc.name) + "</button>";
@@ -1077,7 +1335,7 @@ TEMPLATE = r"""<!DOCTYPE html>
     if (shown >= view.length) return;
     var end = Math.min(view.length, shown + CHUNK), html = "";
     for (var i = shown; i < end; i++) {
-      html += tab === "awoken" ? monRowHtml(view[i]) : rowHtml(view[i], i);
+      html += tab === "chars" ? charRowHtml(view[i]) : rowHtml(view[i], i);
     }
     el.viewport.insertAdjacentHTML("beforeend", html);
     shown = end;
@@ -1104,41 +1362,37 @@ TEMPLATE = r"""<!DOCTYPE html>
       x.setAttribute("aria-selected", String(x === b));
     });
     syncControls();
-    if (tab === "awoken") buildAwChips();
-    else { buildCats(); renderMyCats(); }
+    buildCats();
+    renderMyCats();
+    if (!el.awpick.hidden) renderAwPick();
     apply();
   });
 
   function syncControls() {
     var s = S[tab];
-    var isAw = tab === "awoken";
+    var isChars = tab === "chars";
     el.q.value = s.q;
     el.sort.value = s.sort;
-    el.assistGroup.hidden = isAw;
-    if (!isAw) {
-      [].forEach.call(document.querySelectorAll("#assistSeg button"), function (x) {
-        x.setAttribute("aria-pressed", String(x.dataset.assist === s.assist));
-      });
-    }
-    el.cdGroup.hidden = tab !== "active";
-    el.multGroup.hidden = tab !== "leader";
-    // 覚醒タブは行がモンスターなので、スキル向けの帯は引っ込める
-    el.awbar.hidden = !isAw;
-    el.cats.hidden = isAw;
-    document.getElementById("mycats").hidden = isAw;
-    el.toggleCats.textContent = isAw
-      ? (el.awbar.classList.contains("is-open") ? "覚醒を畳む" : "覚醒を広げる")
-      : (el.cats.classList.contains("is-open") ? "カテゴリを畳む" : "カテゴリを広げる");
-    el.q.placeholder = isAw
-      ? "キャラ名で検索（数字だけなら図鑑番号）"
+    syncAwPickLabel();
+    // 統合タブでは初期CDも攻撃倍率も両方意味を持つ
+    [].forEach.call(document.querySelectorAll("#assistSeg button"), function (x) {
+      x.setAttribute("aria-pressed", String(x.dataset.assist === s.assist));
+    });
+    el.cdGroup.hidden = !(tab === "active" || isChars);
+    el.multGroup.hidden = !(tab === "leader" || isChars);
+    el.toggleCats.textContent = el.cats.classList.contains("is-open")
+      ? "カテゴリを畳む" : "カテゴリを広げる";
+    el.q.placeholder = isChars
+      ? "キャラ名・スキル文・スキル名で検索（数字だけなら図鑑番号）"
       : "スキル文・スキル名・キャラ名で検索（数字だけなら図鑑番号／スキルID）";
     [].forEach.call(document.querySelectorAll(".orb"), function (o) {
       o.setAttribute("aria-pressed", String(s.attrs.indexOf(o.dataset.attr) !== -1));
     });
-    if (tab === "active") {
+    if (s.cdMax !== undefined) {
       el.cdMax.value = s.cdMax;
       el.cdOut.textContent = s.cdMax >= 30 ? "指定なし" : s.cdMax + "ターン以下";
-    } else {
+    }
+    if (s.multMin !== undefined) {
       el.multMin.value = s.multMin;
       el.multOut.textContent = s.multMin === 0 ? "指定なし" : "×" + s.multMin + "以上";
     }
@@ -1258,6 +1512,32 @@ TEMPLATE = r"""<!DOCTYPE html>
     saveMy(); renderMyCats(); apply();
   });
 
+  el.awPickToggle.addEventListener("click", function () {
+    el.awpick.hidden = !el.awpick.hidden;
+    if (!el.awpick.hidden) { renderAwPick(); el.awFilter.focus(); }
+  });
+
+  el.awFilter.addEventListener("input", function () {
+    clearTimeout(timer); timer = setTimeout(renderAwPick, 150);
+  });
+
+  el.awpickList.addEventListener("click", function (e) {
+    var b = e.target.closest("[data-awp]"); if (!b) return;
+    var id = Number(b.dataset.awp), sel = S[tab].aw;
+    S[tab].aw = sel.indexOf(id) === -1 ? sel.concat([id])
+                                       : sel.filter(function (x) { return x !== id; });
+    b.setAttribute("aria-pressed", String(S[tab].aw.indexOf(id) !== -1));
+    syncAwPickLabel();
+    apply();
+  });
+
+  el.awPickClear.addEventListener("click", function () {
+    S[tab].aw = [];
+    syncAwPickLabel();
+    renderAwPick();
+    apply();
+  });
+
   document.getElementById("assistSeg").addEventListener("click", function (e) {
     var b = e.target.closest("button"); if (!b) return;
     [].forEach.call(this.querySelectorAll("button"), function (x) {
@@ -1272,14 +1552,17 @@ TEMPLATE = r"""<!DOCTYPE html>
     apply();
   });
 
+  // 統合タブでも使うので、書き込み先は今のタブの状態にする
   el.cdMax.addEventListener("input", function () {
-    S.active.cdMax = Number(el.cdMax.value);
-    el.cdOut.textContent = S.active.cdMax >= 30 ? "指定なし" : S.active.cdMax + "ターン以下";
+    var v = Number(el.cdMax.value);
+    S[tab].cdMax = v;
+    el.cdOut.textContent = v >= 30 ? "指定なし" : v + "ターン以下";
     debounce(apply);
   });
   el.multMin.addEventListener("input", function () {
-    S.leader.multMin = Number(el.multMin.value);
-    el.multOut.textContent = S.leader.multMin === 0 ? "指定なし" : "×" + S.leader.multMin + "以上";
+    var v = Number(el.multMin.value);
+    S[tab].multMin = v;
+    el.multOut.textContent = v === 0 ? "指定なし" : "×" + v + "以上";
     debounce(apply);
   });
 
@@ -1290,12 +1573,14 @@ TEMPLATE = r"""<!DOCTYPE html>
   });
 
   document.getElementById("reset").addEventListener("click", function () {
-    if (tab === "awoken") S.awoken = { q:"", attrs:[], cats:[], my:[], aw:[], sort:"newest" };
-    else if (tab === "active") S.active = { q:"", attrs:[], cats:[], my:[], cdMax:30, assist:"any", sort:"newest" };
-    else S.leader = { q:"", attrs:[], cats:[], my:[], multMin:0, assist:"any", sort:"newest" };
+    if (tab === "chars") S.chars = { q:"", attrs:[], cats:[], my:[], aw:[], cdMax:30,
+                                     multMin:0, assist:"any", sort:"newest" };
+    else if (tab === "active") S.active = { q:"", attrs:[], cats:[], my:[], aw:[], cdMax:30, assist:"any", sort:"newest" };
+    else S.leader = { q:"", attrs:[], cats:[], my:[], aw:[], multMin:0, assist:"any", sort:"newest" };
     syncControls();
-    if (tab === "awoken") buildAwChips();
-    else { buildCats(); renderMyCats(); }
+    buildCats();
+    renderMyCats();
+    if (!el.awpick.hidden) renderAwPick();
     apply();
   });
 
@@ -1307,20 +1592,7 @@ TEMPLATE = r"""<!DOCTYPE html>
   });
 
   el.toggleCats.addEventListener("click", function () {
-    if (tab === "awoken") {
-      this.textContent = el.awbar.classList.toggle("is-open") ? "覚醒を畳む" : "覚醒を広げる";
-    } else {
-      this.textContent = el.cats.classList.toggle("is-open") ? "カテゴリを畳む" : "カテゴリを広げる";
-    }
-  });
-
-  el.awbar.addEventListener("click", function (e) {
-    var b = e.target.closest(".awchip"); if (!b) return;
-    var id = Number(b.dataset.aw), sel = S.awoken.aw;
-    S.awoken.aw = sel.indexOf(id) === -1 ? sel.concat([id])
-                                         : sel.filter(function (x) { return x !== id; });
-    b.setAttribute("aria-pressed", String(S.awoken.aw.indexOf(id) !== -1));
-    apply();
+    this.textContent = el.cats.classList.toggle("is-open") ? "カテゴリを畳む" : "カテゴリを広げる";
   });
 
   window.addEventListener("scroll", function () {

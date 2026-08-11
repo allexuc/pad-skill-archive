@@ -1,0 +1,4 @@
+# ビルドの中間生成物。docs/pad_skill_archive.html だけあれば動く。
+build/
+docs/archive.json.gz
+docs/pad_archive.sqlite
