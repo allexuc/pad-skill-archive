@@ -29,8 +29,8 @@ jobs:
       - name: 中身が変わっているか確認
         id: diff
         run: |
-          if git diff --quiet -- docs/pad_skill_archive.html; then
-
+          git add docs/
+          if git diff --cached --quiet -- docs/pad_skill_archive.html; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "変更なし"
           else
