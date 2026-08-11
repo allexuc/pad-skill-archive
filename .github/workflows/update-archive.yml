@@ -37,7 +37,7 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
             python - <<'EOF'
           import sqlite3
-          c = sqlite3.connect("out/pad_archive.sqlite")
+          c = sqlite3.connect("docs/pad_archive.sqlite")
           q = c.cursor()
           print("モンスター:", q.execute("SELECT count(*) FROM monsters").fetchone()[0])
           for k in ("active", "leader"):
