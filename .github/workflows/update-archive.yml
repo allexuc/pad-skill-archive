@@ -1,0 +1,56 @@
+name: スキルアーカイブ更新
+
+# 元データ（Mapaler/PADDashFormation の monsters-info）は日次で更新される。
+# 毎週月曜の朝に取り直して、差分があればコミットする。
+on:
+  schedule:
+    - cron: "0 21 * * 0"   # UTC 21:00 日曜 = JST 月曜 06:00
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: アーカイブを再ビルド
+        run: |
+          python build_pad_archive.py --remote out
+          python build_archive_html.py out/archive.json.gz out/pad_skill_archive.html mycategories.json awoken.png
+
+      - name: 中身が変わっているか確認
+        id: diff
+        run: |
+          if [ -z "$(git status --porcelain out/)" ]; then
+
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "変更なし"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            python - <<'EOF'
+          import sqlite3
+          c = sqlite3.connect("out/pad_archive.sqlite")
+          q = c.cursor()
+          print("モンスター:", q.execute("SELECT count(*) FROM monsters").fetchone()[0])
+          for k in ("active", "leader"):
+              n = q.execute("SELECT count(*) FROM skills WHERE kind=?", (k,)).fetchone()[0]
+              print(f"{k}: {n}")
+          EOF
+          fi
+
+      - name: コミット
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add out/
+          git commit -m "スキルアーカイブ更新 $(date -u +%Y-%m-%d)"
+          git push
+
