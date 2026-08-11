@@ -1,0 +1,5 @@
+[
+  {"name": "変身", "pattern": "変身", "scope": "active", "ids": []},
+  {"name": "無効貫通", "pattern": "ダメージ無効を貫通", "scope": "both", "ids": []},
+  {"name": "7×6マス", "pattern": "7[×x]6", "scope": "both", "ids": []}
+]
