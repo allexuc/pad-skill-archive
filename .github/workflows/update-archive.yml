@@ -22,6 +22,7 @@ jobs:
 
       - name: アーカイブを再ビルド
         run: |
+          pip install --quiet Pillow
           python build_pad_archive.py --remote docs
           python build_archive_html.py docs/archive.json.gz docs/pad_skill_archive.html mycategories.json awoken.png
 
