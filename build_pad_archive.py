@@ -32,6 +32,33 @@ RAW_BASE = ("https://raw.githubusercontent.com/Mapaler/PADDashFormation"
 # IDを直書きせず名前から引くことで、名前表を差し替えたときも追随する。
 ASSIST_AWAKENING_NAME = "覚醒アシスト"
 
+# 覚醒の並び順。出現頻度順だと関連するものが散らばるので、名前で束ねる。
+# 上から順に当てはめ、最初に当たったグループに入れる（順序が意味を持つ）。
+# 「＋」つきは基本形と隣り合わせたいので、判定は末尾の＋を外した名前で行う。
+AWAKENING_GROUPS = [
+    ("キラー",         r"キラー$"),
+    ("操作時間",       r"操作時間"),
+    ("耐性",           r"耐性"),
+    ("スキル・アシスト", r"^スキルブースト|^スキルチャージ|^スキルボイス"
+                        r"|覚醒アシスト|マルチブースト|ダンジョンボーナス"),
+    ("ドロップ強化",   r"ドロップ強化"),
+    ("属性強化",       r"^(火|水|木|光|闇)属性強化"),
+    ("コンボ",         r"コンボ強化|コンボドロップ"),
+    ("消し方",         r"消し|2体攻撃"),
+    ("多色",           r"色攻撃強化|同時攻撃$|多色"),
+    ("貫通・追撃",     r"無効貫通|ガードブレイク|追加攻撃|部位破壊"),
+    ("タイプ・副属性", r"タイプ追加|副属性変更"),
+    # 回復と軽減はどちらも耐久側なのでひとまとめ。
+    # ドロップ系の加護は状態異常への備えなのでこちらに残す。
+    ("回復・軽減",     r"回復$|ダメージ軽減$"
+                      r"|^お邪魔ドロップの加護$|^毒ドロップの加護$"),
+    # 単体で立たない常時効果はステータス強化に寄せる。
+    ("ステータス強化", r"強化$|弱化$|アシスト共鳴"
+                      r"|^浮遊$|^陽の加護$|^陰の加護$|^熟成$"
+                      r"|^アフタヌーンティー$|^自力$|^加速$"),
+    ("その他",         r""),
+]
+
 # 属性コード。mon_ja.json の attrs / 既知モンスターで検証済み
 ATTR_NAMES = {0: "火", 1: "水", 2: "木", 3: "光", 4: "闇"}
 ATTR_KEYS = {0: "fire", 1: "water", 2: "wood", 3: "light", 4: "dark"}
@@ -208,6 +235,36 @@ def build(monsters_raw, skills_raw):
     return rows, mon_index
 
 
+def base_name(name):
+    """末尾の ＋ / + を外した名前。X と X＋ を並べるための並び替えキー。"""
+    return re.sub(r"[＋+]+$", "", name)
+
+
+def group_awakenings(aw_names, aw_count):
+    """覚醒を名前で束ねて、グループの順・基本名・IDの順に並べる。"""
+    buckets = {label: [] for label, _ in AWAKENING_GROUPS}
+    for aid, name in aw_names.items():
+        base = base_name(name)
+        for label, pattern in AWAKENING_GROUPS:
+            if not pattern or re.search(pattern, base):
+                buckets[label].append((base, aid, name))
+                break
+
+    # グループ内はゲーム側のID順に近づけたい。ただし X と X＋ は隣り合わせたいので、
+    # 「基本名が最初に現れたID」を第一キー、実IDを第二キーにする。
+    base_first = {}
+    for base, aid, _ in [x for v in buckets.values() for x in v]:
+        if base not in base_first or aid < base_first[base]:
+            base_first[base] = aid
+
+    out = []
+    for label, _ in AWAKENING_GROUPS:
+        items = sorted(buckets[label], key=lambda x: (base_first[x[0]], x[1]))
+        if items:
+            out.append([label, [aid for _, aid, _ in items]])
+    return out
+
+
 def find_assist_awakening_id(aw_names):
     for aid, name in aw_names.items():
         if name == ASSIST_AWAKENING_NAME:
@@ -354,6 +411,8 @@ def build_json(rows, mons, aw_names, out_path):
         "awnames": {str(k): v for k, v in sorted(aw_names.items())},
         # 覚醒アシスト持ちの図鑑番号。スキル側の絞り込みと所持キャラの印に使う。
         "assist": assist_ids,
+        # 覚醒の表示順。[[グループ名, [覚醒ID...]], ...]
+        "awgroups": group_awakenings(aw_names, None),
     }
     blob = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     # mtime を固定しないと中身が同じでも毎回バイト列が変わり、
