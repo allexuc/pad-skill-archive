@@ -121,6 +121,9 @@
   .orb-fire { background: var(--fire); }  .orb-water { background: var(--water); }
   .orb-wood { background: var(--wood); }  .orb-light { background: var(--light); }
   .orb-dark { background: var(--dark); }  .orb-heal { background: var(--heal); }
+  /* 回復はドロップの種類であってモンスターの属性ではない。
+     キャラタブは図鑑の属性で絞るので、押しても必ず0件になるため隠す。 */
+  .orb[hidden] { display: none; }
 
   .sel {
     font-family: var(--jp); font-size: 12.5px; color: var(--ink);
@@ -360,9 +363,18 @@
   .awpick-note { font-size: 11px; color: var(--muted); }
   .awpick-list {
     display: flex; flex-wrap: wrap; gap: 4px;
-    max-height: 172px; overflow-y: auto;
+    max-height: 46vh; overflow-y: auto;
+    flex-direction: column; align-items: flex-start;
   }
   .awpick-list .none { font-size: 11.5px; color: var(--muted); padding: 4px; }
+  .awgrp { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 3px 0; }
+  .awgrp-label {
+    flex: 0 0 90px; text-align: right;
+    font-size: 10.5px; color: var(--muted); line-height: 26px;
+  }
+  .awgrp-items { display: flex; flex-wrap: wrap; gap: 3px; }
+  .awchip.is-icon { padding: 2px; gap: 0; border-radius: 6px; }
+  .awchip.is-icon[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--focus); }
 
   /* 統合タブの行: 1行 = キャラ */
   .crow { padding: 15px 20px; border-bottom: 1px solid rgba(44,51,85,.55); }
@@ -451,6 +463,8 @@
     .search { font-size: 16px; }
     .tabs button { flex: 1; padding: 10px 6px; font-size: 13px; }
     .mycats { padding: 9px 14px; }
+    .awgrp { flex-direction: column; gap: 2px; }
+    .awgrp-label { flex: none; text-align: left; line-height: 1.4; }
     #mcName, #mcPattern { flex: 1 1 100%; width: auto; }
     .mc-form { gap: 6px; }
   }
@@ -793,27 +807,35 @@
     return counts;
   }
 
+  // 136個を頻度順に並べると関連するものが散らばるので、
+  // ETL側で名前ごとに束ねた順（DATA.awgroups）で出す。名前はアイコンの
+  // ツールチップに寄せて、一覧はアイコンだけにしてある。
   function renderAwPick() {
-    if (tab === "chars") { /* 統合タブでも使う */ }
     var counts = awSkillCounts();
     var needle = el.awFilter.value.trim();
     var sel = S[tab].aw;
-    var ids = Object.keys(counts).map(Number)
-      .filter(function (id) { return !needle || awName(id).indexOf(needle) !== -1; })
-      .sort(function (a, b) { return counts[b] - counts[a]; });
-
-    if (!ids.length) {
-      el.awpickList.innerHTML = '<span class="none">該当する覚醒がありません。</span>';
-      return;
-    }
+    var unit = tab === "chars" ? "体" : "件";
     var html = "";
-    ids.forEach(function (id) {
-      html += '<button class="awchip" type="button" aria-pressed="' +
-              (sel.indexOf(id) !== -1) + '" data-awp="' + id + '">' +
-              awIcon(id, true) + "<span>" + escapeHtml(awName(id)) + "</span>" +
-              "<em>" + counts[id].toLocaleString() + "</em></button>";
+
+    (DATA.awgroups || []).forEach(function (grp) {
+      var ids = grp[1].filter(function (id) {
+        if (!counts[id]) return false;
+        return !needle || awName(id).indexOf(needle) !== -1;
+      });
+      if (!ids.length) return;
+      html += '<div class="awgrp"><span class="awgrp-label">' + escapeHtml(grp[0]) +
+              '</span><div class="awgrp-items">';
+      ids.forEach(function (id) {
+        html += '<button class="awchip is-icon" type="button" aria-pressed="' +
+                (sel.indexOf(id) !== -1) + '" data-awp="' + id + '" title="' +
+                escapeHtml(awName(id)) + " · " + counts[id].toLocaleString() + unit +
+                '">' + awIcon(id, true) + "</button>";
+      });
+      html += "</div></div>";
     });
-    el.awpickList.innerHTML = html;
+
+    el.awpickList.innerHTML = html ||
+      '<span class="none">該当する覚醒がありません。</span>';
   }
 
   function syncAwPickLabel() {
@@ -1355,6 +1377,11 @@
     el.q.value = s.q;
     el.sort.value = s.sort;
     syncAwPickLabel();
+    var healOrb = document.querySelector('.orb[data-attr="heal"]');
+    healOrb.hidden = isChars;
+    if (isChars && s.attrs.indexOf("heal") !== -1) {
+      s.attrs = s.attrs.filter(function (x) { return x !== "heal"; });
+    }
     // 統合タブでは初期CDも攻撃倍率も両方意味を持つ
     [].forEach.call(document.querySelectorAll("#assistSeg button"), function (x) {
       x.setAttribute("aria-pressed", String(x.dataset.assist === s.assist));
