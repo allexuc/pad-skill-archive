@@ -632,6 +632,27 @@
                      light:"var(--light)", dark:"var(--dark)", heal:"var(--heal)" };
   var CHUNK = 60, MON_LIMIT = 8;
 
+  // タッチで入力欄に自動フォーカスすると、ソフトキーボードがせり上がって
+  // 肝心の選択肢が隠れてしまう。端末で決め打ちせず、その操作が指だったかで判断する。
+  // タッチ対応ノートPCのようにマウスと指を併用する端末でも正しく振る舞う。
+  // any- を使うのは主入力ではなく「マウス等が繋がっているか」を見たいから。
+  // hover/pointer だとタッチ対応PCが主入力=指と判定され、マウス操作でも指扱いになる。
+  var HAS_KEYBOARD = !window.matchMedia ||
+    window.matchMedia("(any-hover: hover) and (any-pointer: fine)").matches;
+
+  // 指で操作されたなら true。2つの根拠を併用する。
+  //  1. そもそも指しか使えない端末（スマホ・タブレット）なら常に true
+  //  2. マウスと指を併用できる端末なら、その操作の pointerType で決める
+  // 1 を先に見るのは、環境によって合成クリックの pointerType が "mouse" に
+  // なることがあり、それでスマホにキーボードが出るのを防ぐため。
+  function cameFromTouch(e) {
+    if (!HAS_KEYBOARD) return true;
+    if (e && typeof e.pointerType === "string" && e.pointerType !== "") {
+      return e.pointerType === "touch";
+    }
+    return false;
+  }
+
   var DATA = null, MONS = null;
   var tab = "chars";
   var view = [], shown = 0;
@@ -998,7 +1019,7 @@
       return;
     }
     hideState();
-    window.scrollTo(0, 0);
+    keepScrollInResults();
     render();
   }
 
@@ -1043,6 +1064,17 @@
         skillBlock(r[5] >= 0 ? DATA.active[r[5]] : null, "active") +
         skillBlock(r[6] >= 0 ? DATA.leader[r[6]] : null, "leader") +
       "</div></div>";
+  }
+
+  // 絞り込むと結果を先頭から描き直すので、深くスクロールしていた場合だけ
+  // 結果の先頭まで引き戻す。チップは結果より上にあるので、そこを見ている間は動かさない。
+  function keepScrollInResults() {
+    var y = window.pageYOffset;
+    var top = el.viewport.getBoundingClientRect().top + y;
+    var head = document.querySelector(".masthead");
+    var stuck = head ? head.getBoundingClientRect().height : 0;
+    var limit = Math.max(0, Math.round(top - stuck));
+    if (y > limit) window.scrollTo(0, limit);
   }
 
   function showState(t, b) {
@@ -1223,7 +1255,7 @@
       return;
     }
     hideState();
-    window.scrollTo(0, 0);
+    keepScrollInResults();
     render();
   }
 
@@ -1466,7 +1498,13 @@
 
   el.mcAdd.addEventListener("click", function () {
     el.mcForm.hidden = !el.mcForm.hidden;
-    if (!el.mcForm.hidden) { el.mcName.value = ""; el.mcPattern.value = ""; previewMy(); el.mcName.focus(); }
+    if (!el.mcForm.hidden) {
+      el.mcName.value = "";
+      el.mcPattern.value = "";
+      previewMy();
+      // こちらは名前を打つのが目的なので、指でもフォーカスしてよい
+      el.mcName.focus();
+    }
   });
   el.mcCancel.addEventListener("click", function () { el.mcForm.hidden = true; });
 
@@ -1520,9 +1558,12 @@
     saveMy(); renderMyCats(); apply();
   });
 
-  el.awPickToggle.addEventListener("click", function () {
+  el.awPickToggle.addEventListener("click", function (e) {
     el.awpick.hidden = !el.awpick.hidden;
-    if (!el.awpick.hidden) { renderAwPick(); el.awFilter.focus(); }
+    if (!el.awpick.hidden) {
+      renderAwPick();
+      if (!cameFromTouch(e)) el.awFilter.focus();
+    }
   });
 
   el.awFilter.addEventListener("input", function () {
@@ -1610,7 +1651,10 @@
 
   window.addEventListener("resize", fill);
   document.addEventListener("keydown", function (e) {
-    if (e.key === "/" && document.activeElement !== el.q) { e.preventDefault(); el.q.focus(); }
+    if (e.key === "/" && HAS_KEYBOARD && document.activeElement !== el.q) {
+      e.preventDefault();
+      el.q.focus();
+    }
   });
 
   syncControls();
