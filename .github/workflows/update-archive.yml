@@ -38,6 +38,35 @@ jobs:
             mycategories.json \
             awoken.png
 
+      - name: 生成物の検査
+        # 生成されたHTMLに主要な機能が入っているか確かめる。
+        # スクリプトの更新漏れや置換の空振りに気づかないまま
+        # コミットしてしまうのを防ぐための歯止め。
+        run: |
+          python - <<'PYEOF'
+          import sys
+          from pathlib import Path
+
+          html = Path("docs/pad_skill_archive.html").read_text(encoding="utf-8")
+          required = {
+              "タッチ端末の自動フォーカス抑止": "cameFromTouch",
+              "任意ポインタでの端末判定":       "any-pointer: fine",
+              "チップ押下時のスクロール保持":   "keepScrollInResults",
+              "キャラ統合タブ":                 'data-tab="chars"',
+              "覚醒の絞り込み":                 "awpick",
+              "覚醒のグループ表示":             "awgrp-label",
+              "マイカテゴリ":                   "mycatChips",
+          }
+          missing = [name for name, needle in required.items() if needle not in html]
+          if missing:
+              print("生成物に次の機能が入っていません:")
+              for name in missing:
+                  print("  -", name)
+              print("build_archive_html.py が古い可能性があります。")
+              sys.exit(1)
+          print(f"検査OK: {len(required)} 項目 / {len(html)/1024/1024:.2f} MB")
+          PYEOF
+
       - name: 中身が変わっているか確認
         id: diff
         run: |
