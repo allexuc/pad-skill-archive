@@ -544,7 +544,7 @@ TEMPLATE = r"""<!DOCTYPE html>
     </div>
 
     <div class="group slider" id="cdGroup">
-      <span class="group-label">初期CD</span>
+      <span class="group-label">最短CD</span>
       <input id="cdMax" type="range" min="0" max="30" value="30" step="1" aria-label="初期溜まりターンの上限">
       <output id="cdOut">指定なし</output>
     </div>
@@ -560,8 +560,8 @@ TEMPLATE = r"""<!DOCTYPE html>
       <select class="sortsel" id="sort" aria-label="並び順">
         <option value="newest">新しいキャラ順</option>
         <option value="oldest">古いキャラ順</option>
-        <option value="holders">所持キャラ数</option>
-        <option value="skill">スキルID順</option>
+        <option value="holders" data-chars="覚醒の多い順">所持キャラ数</option>
+        <option value="skill" data-chars="最短CDの短い順">スキルID順</option>
       </select>
     </div>
 
@@ -948,9 +948,9 @@ TEMPLATE = r"""<!DOCTYPE html>
   function charMatchesText(r, q) {
     if (r[1].indexOf(q) !== -1) return true;
     var a = r[5] >= 0 ? DATA.active[r[5]] : null;
-    if (a && (a[2].indexOf(q) !== -1 || a[10].indexOf(q) !== -1 || a[1].indexOf(q) !== -1)) return true;
+    if (a && (a[2].indexOf(q) !== -1 || a[11].indexOf(q) !== -1 || a[1].indexOf(q) !== -1)) return true;
     var l = r[6] >= 0 ? DATA.leader[r[6]] : null;
-    if (l && (l[2].indexOf(q) !== -1 || l[10].indexOf(q) !== -1 || l[1].indexOf(q) !== -1)) return true;
+    if (l && (l[2].indexOf(q) !== -1 || l[11].indexOf(q) !== -1 || l[1].indexOf(q) !== -1)) return true;
     return false;
   }
 
@@ -995,7 +995,8 @@ TEMPLATE = r"""<!DOCTYPE html>
       }
 
       if (s.cdMax < 30) {
-        if (r[5] < 0 || DATA.active[r[5]][3] > s.cdMax) continue;
+        // 実際に運用するのは最大レベルなので、最短CDで絞る
+        if (r[5] < 0 || cdOf(DATA.active[r[5]]) > s.cdMax) continue;
       }
       if (s.multMin > 0) {
         if (r[6] < 0 || !(DATA.leader[r[6]][6] >= s.multMin)) continue;
@@ -1025,8 +1026,8 @@ TEMPLATE = r"""<!DOCTYPE html>
       return (y[3].length + y[4].length) - (x[3].length + x[4].length) || y[0] - x[0];
     });
     else if (s.sort === "skill") out.sort(function (x, y) {
-      var cx = x[5] >= 0 ? DATA.active[x[5]][3] : 99;
-      var cy = y[5] >= 0 ? DATA.active[y[5]][3] : 99;
+      var cx = x[5] >= 0 ? cdOf(DATA.active[x[5]]) : 99;
+      var cy = y[5] >= 0 ? cdOf(DATA.active[y[5]]) : 99;
       return cx - cy || y[0] - x[0];
     });
     else out.sort(function (x, y) { return y[0] - x[0]; });
@@ -1042,6 +1043,18 @@ TEMPLATE = r"""<!DOCTYPE html>
     render();
   }
 
+  // スキルレベルが上がるとCDが縮む。r[3] がレベル1、r[8] が最大レベルでの値。
+  function cdOf(r) { return r.length > 8 && r[8] ? r[8] : r[3]; }
+
+  function cdLabel(r) {
+    if (!r[3]) return "";
+    var mn = r.length > 8 && r[8] ? r[8] : r[3];
+    var body = mn < r[3] ? r[3] + " → " + mn : String(r[3]);
+    return '<span class="row-cd" title="スキルレベル1で' + r[3] + 'ターン、' +
+           (mn < r[3] ? "最大レベルで" + mn + "ターン" : "レベルアップによる短縮なし") +
+           '">CD ' + body + "</span>";
+  }
+
   function skillBlock(r, kind) {
     var isL = kind === "leader";
     if (!r) {
@@ -1051,7 +1064,7 @@ TEMPLATE = r"""<!DOCTYPE html>
     }
     var meta = isL
       ? (r[6] ? '<span class="row-cd">最大 ×' + r[6] + "</span>" : "")
-      : (r[3] ? '<span class="row-cd">初期CD ' + r[3] + "</span>" : "");
+      : cdLabel(r);
     return '<div class="uni-block">' +
       '<div class="uni-top"><span class="uni-label' + (isL ? " is-leader" : "") + '">' +
         (isL ? "LEADER" : "ACTIVE") + "</span>" +
@@ -1134,9 +1147,10 @@ TEMPLATE = r"""<!DOCTYPE html>
             if (m) names += m[0] + " ";
             ids += r[7][i] + " ";
           }
-          r.push(names);                          // [8] 所持キャラ名
-          r.push(ids);                            // [9] 図鑑番号
-          r.push(r[2].replace(/[\[\]]/g, ""));    // [10] 角括弧を外した説明文
+          // [8] は最短CD（payload側で入っている）。以降が実行時の追加分。
+          r[9]  = names;                          // 所持キャラ名
+          r[10] = ids;                            // 図鑑番号
+          r[11] = r[2].replace(/[\[\]]/g, "");    // 角括弧を外した説明文
         });
       });
 
@@ -1244,7 +1258,7 @@ TEMPLATE = r"""<!DOCTYPE html>
         if (s.assist === "not" && hasA) continue;
       }
 
-      if (tab === "active" && s.cdMax < 30 && r[3] > s.cdMax) continue;
+      if (tab === "active" && s.cdMax < 30 && cdOf(r) > s.cdMax) continue;
       if (tab === "leader" && s.multMin > 0 && !(r[6] >= s.multMin)) continue;
 
       if (q) {
@@ -1253,9 +1267,9 @@ TEMPLATE = r"""<!DOCTYPE html>
           // 説明文の中の数字に引っかかると探しものが埋もれるため。
           if (String(r[0]) !== q && r[7].indexOf(qNum) === -1) continue;
         } else if (r[2].indexOf(q) === -1 &&
-                   r[10].indexOf(qBare) === -1 &&
+                   r[11].indexOf(qBare) === -1 &&
                    r[1].indexOf(q) === -1 &&
-                   r[8].indexOf(q) === -1 &&
+                   r[9].indexOf(q) === -1 &&
                    r[1].toLowerCase().indexOf(qLower) === -1) {
           continue;
         }
@@ -1366,7 +1380,7 @@ TEMPLATE = r"""<!DOCTYPE html>
     }
 
     var meta = "";
-    if (tab === "active" && r[3]) meta = '<span class="row-cd">初期CD ' + r[3] + "</span>";
+    if (tab === "active") meta = cdLabel(r);
     else if (tab === "leader" && r[6]) meta = '<span class="row-cd">最大 ×' + r[6] + "</span>";
 
     return '<div class="row">' +
@@ -1426,6 +1440,12 @@ TEMPLATE = r"""<!DOCTYPE html>
     var s = S[tab];
     var isChars = tab === "chars";
     el.q.value = s.q;
+    // 統合タブは行がキャラなので、同じ選択肢でも基準が変わる。実態に合わせて名前を差し替える。
+    [].forEach.call(el.sort.options, function (o) {
+      if (!o.dataset.chars) return;
+      if (!o.dataset.skills) o.dataset.skills = o.textContent;
+      o.textContent = isChars ? o.dataset.chars : o.dataset.skills;
+    });
     el.sort.value = s.sort;
     syncAwPickLabel();
     var healOrb = document.querySelector('.orb[data-attr="heal"]');

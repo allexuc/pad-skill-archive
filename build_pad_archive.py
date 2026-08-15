@@ -217,13 +217,21 @@ def build(monsters_raw, skills_raw):
             desc = strip_control_codes((s.get("description") or "").replace("\r", ""))
             # 図鑑番号順にすると進化ツリーが並ぶので読みやすい
             mids = sorted(set(mids))
+            # スキルレベルが1上がるごとに1ターン短くなる。maxLevel が
+            # レベルの総数なので、短縮できるのは maxLevel-1 ターン。
+            # 対象8,774件で最短が1未満になるものが無いことを確認済み。
+            maxlv = s.get("maxLevel", 0) or 0
+            cd = s.get("initialCooldown", 0) or 0
+            cd_min = cd - (maxlv - 1) if maxlv >= 1 else cd
+
             rows.append({
                 "kind": kind,
                 "id": sid,
                 "name": s.get("name", "") or "",
                 "desc": desc,
-                "cooldown": s.get("initialCooldown", 0) or 0,
-                "maxlv": s.get("maxLevel", 0) or 0,
+                "cooldown": cd,
+                "cooldown_min": max(cd_min, 0),
+                "maxlv": maxlv,
                 "cats": categorize(desc, rules),
                 "attrs": detect_attrs(desc),
                 "mult": max_multiplier(desc) if kind == "leader" else 0.0,
@@ -304,7 +312,8 @@ def build_sqlite(rows, mons, aw_names, out_path):
             skill_id INTEGER NOT NULL,
             name TEXT,
             description TEXT,
-            cooldown INTEGER,                 -- 初期の溜まりターン
+            cooldown INTEGER,                 -- スキルレベル1での溜まりターン
+            cooldown_min INTEGER,             -- 最大レベルでの溜まりターン
             max_level INTEGER,
             attrs TEXT,
             multiplier REAL,                  -- 説明文から拾った最大攻撃倍率
@@ -356,10 +365,10 @@ def build_sqlite(rows, mons, aw_names, out_path):
         fts = False
 
     for i, r in enumerate(rows, start=1):
-        cur.execute("INSERT INTO skills VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        cur.execute("INSERT INTO skills VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (i, r["kind"], r["id"], r["name"], r["desc"], r["cooldown"],
-                     r["maxlv"], ",".join(r["attrs"]), r["mult"], len(r["mons"]),
-                     r["mons"][-1], r["mons"][0]))
+                     r["cooldown_min"], r["maxlv"], ",".join(r["attrs"]), r["mult"],
+                     len(r["mons"]), r["mons"][-1], r["mons"][0]))
         cur.executemany("INSERT INTO skill_categories VALUES (?,?)",
                         [(i, c) for c in r["cats"]])
         cur.executemany("INSERT INTO skill_holders VALUES (?,?,?,?)",
@@ -390,9 +399,11 @@ def build_json(rows, mons, aw_names, out_path):
     cat_idx = {k: {c: i for i, c in enumerate(v)} for k, v in cats.items()}
 
     def pack(kind):
+        # [8] を足すときは build_archive_html.py 側の実行時追加分（[9]以降）も
+        # ずらすこと。添字がずれても例外にならず静かに壊れる。
         return [[r["id"], r["name"], r["desc"], r["cooldown"],
                  [cat_idx[kind][c] for c in r["cats"]],
-                 r["attrs"], round(r["mult"], 2), r["mons"]]
+                 r["attrs"], round(r["mult"], 2), r["mons"], r["cooldown_min"]]
                 for r in rows if r["kind"] == kind]
 
     payload = {
