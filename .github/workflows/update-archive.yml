@@ -56,6 +56,7 @@ jobs:
               "覚醒の絞り込み":                 "awpick",
               "覚醒のグループ表示":             "awgrp-label",
               "マイカテゴリ":                   "mycatChips",
+              "最短CDの表示":                   "cdLabel",
           }
           missing = [name for name, needle in required.items() if needle not in html]
           if missing:
