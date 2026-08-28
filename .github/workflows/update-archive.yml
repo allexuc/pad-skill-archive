@@ -58,6 +58,8 @@ jobs:
               "マイカテゴリ":                   "mycatChips",
               "最短CDの表示":                   "cdLabel",
               "タイプの絞り込み":               "buildTypeChips",
+              "検索対象の切り替え":             "scopeSeg",
+              "帯ごとの操作ボタン":             "band-toggle",
           }
           missing = [name for name, needle in required.items() if needle not in html]
           if missing:
