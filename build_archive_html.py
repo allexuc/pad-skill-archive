@@ -173,6 +173,30 @@ TEMPLATE = r"""<!DOCTYPE html>
   }
   .mon { max-width: 100%; }
 
+  /* タイプ。属性オーブの隣に置くので、同じくらいの主張に抑える */
+  .types { display: flex; flex-wrap: wrap; gap: 4px; }
+  .type {
+    font-size: 11.5px; color: var(--muted);
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 3px 9px; cursor: pointer; white-space: nowrap;
+  }
+  .type:hover { color: var(--ink); }
+  .type[aria-pressed="true"] {
+    background: var(--focus); border-color: var(--focus);
+    color: #08122A; font-weight: 700;
+  }
+  /* 進化用・覚醒用などの素材タイプは普段使わないので既定で隠す。
+     常時出すとモバイルで3行になり、結果の表示面積を大きく削るため。 */
+  .type.is-material { opacity: .62; }
+  .types:not(.is-open) .type.is-material { display: none; }
+  .type-more {
+    font-size: 11px; color: var(--muted); background: none;
+    border: 1px dashed var(--line); border-radius: 6px;
+    padding: 3px 8px; cursor: pointer; font-family: var(--jp);
+  }
+  .type-more:hover { color: var(--ink); }
+  .typeGroup[hidden] { display: none; }
+
   .slider { display: flex; align-items: center; gap: 8px; }
   .slider input { width: 118px; accent-color: var(--focus); }
   .slider output { font-family: var(--mono); font-size: 12px; min-width: 62px; }
@@ -530,6 +554,11 @@ TEMPLATE = r"""<!DOCTYPE html>
       </div>
     </div>
 
+    <div class="group typeGroup" id="typeGroup">
+      <span class="group-label">タイプ</span>
+      <div class="types" id="types"></div>
+    </div>
+
     <div class="group" id="awPickGroup">
       <button class="btn" id="awPickToggle" type="button">覚醒で絞る</button>
     </div>
@@ -679,9 +708,9 @@ TEMPLATE = r"""<!DOCTYPE html>
 
   // タブごとに条件を持つ。アクティブとリーダーは別物として扱う。
   var S = {
-    active: { q:"", attrs:[], cats:[], my:[], aw:[], cdMax:30, assist:"any", sort:"newest" },
-    leader: { q:"", attrs:[], cats:[], my:[], aw:[], multMin:0, assist:"any", sort:"newest" },
-    chars:  { q:"", attrs:[], cats:[], my:[], aw:[], cdMax:30, multMin:0,
+    active: { q:"", attrs:[], types:[], cats:[], my:[], aw:[], cdMax:30, assist:"any", sort:"newest" },
+    leader: { q:"", attrs:[], types:[], cats:[], my:[], aw:[], multMin:0, assist:"any", sort:"newest" },
+    chars:  { q:"", attrs:[], types:[], cats:[], my:[], aw:[], cdMax:30, multMin:0,
               assist:"any", sort:"newest" }
   };
 
@@ -689,7 +718,7 @@ TEMPLATE = r"""<!DOCTYPE html>
   ["q","cats","scroller","viewport","state","stamp","hits","sort",
    "cdMax","cdOut","multMin","multOut","cdGroup","multGroup",
    "nActive","nLeader","toggleCats",
-   "notePanel","noteToggle","assistGroup","nChars",
+   "notePanel","noteToggle","assistGroup","nChars","types","typeGroup",
    "awpick","awpickList","awFilter","awPickToggle","awPickClear","awPickGroup",
    "mycatChips","mcAdd","mcForm","mcName","mcPattern","mcScope","mcPreview",
    "mcSave","mcCancel","mcHint","mcIo","mcIoToggle","mcJson","mcLoad"].forEach(function (id) {
@@ -779,6 +808,60 @@ TEMPLATE = r"""<!DOCTYPE html>
               "</span>";
     });
     el.mycatChips.innerHTML = html;
+  }
+
+  // 図鑑番号 -> タイプコードの集合
+  var MON_TYPE = null;
+  var MATERIAL_TYPES = [0, 12, 14, 15];   // 進化用・覚醒用・強化合成用・売却用
+
+  function buildMonType() {
+    MON_TYPE = new Map();
+    for (var k in DATA.mons) {
+      MON_TYPE.set(Number(k), DATA.mons[k][3] || []);
+    }
+  }
+
+  function monHasTypes(mid, want) {
+    var ts = MON_TYPE.get(mid);
+    if (!ts) return false;
+    for (var i = 0; i < want.length; i++) {
+      if (ts.indexOf(want[i]) === -1) return false;
+    }
+    return true;
+  }
+
+  // スキル側は「そのタイプをすべて持つキャラが1体でも所持しているか」で残す
+  function skillHasTypes(r, want) {
+    for (var i = 0; i < r[7].length; i++) {
+      if (monHasTypes(r[7][i], want)) return true;
+    }
+    return false;
+  }
+
+  function buildTypeChips() {
+    if (!DATA) return;          // 初期化時は syncControls が先に走る
+    var counts = {};
+    for (var k in DATA.mons) {
+      var ts = DATA.mons[k][3] || [];
+      for (var i = 0; i < ts.length; i++) counts[ts[i]] = (counts[ts[i]] || 0) + 1;
+    }
+    var sel = S[tab].types, html = "";
+    (DATA.types || []).forEach(function (t) {
+      var code = t[0];
+      if (!counts[code]) return;
+      html += '<button class="type' +
+              (MATERIAL_TYPES.indexOf(code) !== -1 ? " is-material" : "") +
+              '" type="button" aria-pressed="' + (sel.indexOf(code) !== -1) +
+              '" data-type="' + code + '" title="' + counts[code].toLocaleString() +
+              '体">' + escapeHtml(t[1]) + "</button>";
+    });
+    var open = el.types.classList.contains("is-open");
+    // 素材タイプを選んだまま隠れると理由の分からない絞り込みになるので、その場合は開く
+    var hidden = sel.some(function (c) { return MATERIAL_TYPES.indexOf(c) !== -1; });
+    if (hidden && !open) { el.types.classList.add("is-open"); open = true; }
+    html += '<button class="type-more" type="button">' +
+            (open ? "素材を隠す" : "素材…") + "</button>";
+    el.types.innerHTML = html;
   }
 
   // 図鑑番号 -> その子が持つ覚醒の集合。スキル側から覚醒で絞るのに使う。
@@ -972,6 +1055,8 @@ TEMPLATE = r"""<!DOCTYPE html>
         if (!ok) continue;
       }
 
+      if (s.types.length && !monHasTypes(r[0], s.types)) continue;
+
       if (s.aw.length) {
         var oka = true;
         for (var w = 0; w < s.aw.length; w++) {
@@ -1135,6 +1220,8 @@ TEMPLATE = r"""<!DOCTYPE html>
       MONS = DATA.mons;
       ASSIST = new Set(DATA.assist || []);
       buildMonAw();
+      buildMonType();
+      buildTypeChips();
       buildChars();
       el.nChars.textContent = DATA.chars.length.toLocaleString();
 
@@ -1249,6 +1336,8 @@ TEMPLATE = r"""<!DOCTYPE html>
         }
         if (!okm) continue;
       }
+
+      if (s.types.length && !skillHasTypes(r, s.types)) continue;
 
       if (s.aw.length && !skillHasAwakenings(r, s.aw)) continue;
 
@@ -1447,6 +1536,7 @@ TEMPLATE = r"""<!DOCTYPE html>
       o.textContent = isChars ? o.dataset.chars : o.dataset.skills;
     });
     el.sort.value = s.sort;
+    buildTypeChips();
     syncAwPickLabel();
     var healOrb = document.querySelector('.orb[data-attr="heal"]');
     healOrb.hidden = isChars;
@@ -1597,6 +1687,20 @@ TEMPLATE = r"""<!DOCTYPE html>
     saveMy(); renderMyCats(); apply();
   });
 
+  el.types.addEventListener("click", function (e) {
+    if (e.target.closest(".type-more")) {
+      el.types.classList.toggle("is-open");
+      buildTypeChips();
+      return;
+    }
+    var b = e.target.closest(".type"); if (!b) return;
+    var code = Number(b.dataset.type), sel = S[tab].types;
+    S[tab].types = sel.indexOf(code) === -1 ? sel.concat([code])
+                                            : sel.filter(function (x) { return x !== code; });
+    b.setAttribute("aria-pressed", String(S[tab].types.indexOf(code) !== -1));
+    apply();
+  });
+
   el.awPickToggle.addEventListener("click", function (e) {
     el.awpick.hidden = !el.awpick.hidden;
     if (!el.awpick.hidden) {
@@ -1661,10 +1765,10 @@ TEMPLATE = r"""<!DOCTYPE html>
   });
 
   document.getElementById("reset").addEventListener("click", function () {
-    if (tab === "chars") S.chars = { q:"", attrs:[], cats:[], my:[], aw:[], cdMax:30,
+    if (tab === "chars") S.chars = { q:"", attrs:[], types:[], cats:[], my:[], aw:[], cdMax:30,
                                      multMin:0, assist:"any", sort:"newest" };
-    else if (tab === "active") S.active = { q:"", attrs:[], cats:[], my:[], aw:[], cdMax:30, assist:"any", sort:"newest" };
-    else S.leader = { q:"", attrs:[], cats:[], my:[], aw:[], multMin:0, assist:"any", sort:"newest" };
+    else if (tab === "active") S.active = { q:"", attrs:[], types:[], cats:[], my:[], aw:[], cdMax:30, assist:"any", sort:"newest" };
+    else S.leader = { q:"", attrs:[], types:[], cats:[], my:[], aw:[], multMin:0, assist:"any", sort:"newest" };
     syncControls();
     buildCats();
     renderMyCats();

@@ -73,6 +73,9 @@ TYPE_NAMES = {
     12: "覚醒用", 14: "強化合成用", 15: "売却用",
 }
 
+# 画面に出す順。戦闘で使うタイプを先に、素材系を後ろにまとめる。
+TYPE_ORDER = [4, 5, 7, 8, 1, 6, 2, 3, 0, 12, 14, 15]
+
 # スキル説明文から日本語カテゴリを起こす。英語タグより検索語に近い。
 ACTIVE_RULES = [
     ("ロック解除",       r"ロック.{0,4}解除"),
@@ -430,8 +433,11 @@ def build_json(rows, mons, aw_names, out_path):
         "leader": pack("leader"),
         "mons": {str(m["id"]): [m["name"],
                                 [ATTR_KEYS[a] for a in m["attrs"]],
-                                m["rarity"]]
+                                m["rarity"],
+                                m["types"]]          # [3] タイプコード
                  for m in mons.values()},
+        # 表示順に並べたタイプ。[[コード, 名前], ...]
+        "types": [[t, TYPE_NAMES[t]] for t in TYPE_ORDER],
         # 覚醒タブ用。行はモンスターそのもの。
         "awoken": [[m["id"], m["name"], [ATTR_KEYS[a] for a in m["attrs"]],
                     m.get("awakenings", []), m.get("super", [])]
