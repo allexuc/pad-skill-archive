@@ -60,9 +60,12 @@ TEMPLATE = r"""<!DOCTYPE html>
   :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
   /* ---------- ヘッダー ---------- */
+  /* 固定するのは検索欄だけ。タブや検索対象まで貼り付けると
+     モバイルで画面の2割を持っていかれるため、それらは一緒に流す。 */
+  .tabbar { padding: 0 20px; }
   .masthead {
     position: sticky; top: 0; z-index: 30;
-    padding: 10px 20px 0;
+    padding: 6px 20px;
     border-bottom: 1px solid var(--line);
     background: var(--ground);
     box-shadow: 0 6px 18px -12px #000;
@@ -96,18 +99,25 @@ TEMPLATE = r"""<!DOCTYPE html>
     color: var(--ink); border-bottom-color: var(--focus);
   }
 
-  .search-wrap { position: relative; margin-bottom: 12px; }
+  /* 1行にアクティブとリーダーが同居しているので、どちらに当てるか選べるようにする */
+  .scopebar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 20px 0; flex-wrap: wrap;
+  }
+  .scopebar[hidden] { display: none; }
+
+  .search-wrap { position: relative; }
   .search {
-    width: 100%; padding: 13px 16px 13px 42px;
-    font-family: var(--jp); font-size: 17px; font-weight: 500;
+    width: 100%; padding: 8px 14px 8px 36px;
+    font-family: var(--jp); font-size: 15px; font-weight: 500;
     color: var(--ink); background: var(--panel);
     border: 1px solid var(--line); border-radius: 10px;
   }
   .search::placeholder { color: var(--muted); font-weight: 400; }
   .search:focus { border-color: var(--focus); outline: none; }
   .search-icon {
-    position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
-    color: var(--muted); pointer-events: none; font-size: 15px;
+    position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); pointer-events: none; font-size: 13px;
   }
 
   .controls {
@@ -389,6 +399,22 @@ TEMPLATE = r"""<!DOCTYPE html>
   .awchip em { font-style: normal; opacity: .65; font-family: var(--mono); font-size: 10px; }
 
   /* スキルタブから覚醒で絞るための引き出し */
+  /* 帯の直上に置く操作行。どの帯に効くボタンかを近さで示す。 */
+  .bandhead {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 20px 0;
+  }
+  .bandhead[hidden] { display: none; }
+  .band-toggle {
+    font-family: var(--jp); font-size: 11.5px; color: var(--muted);
+    background: transparent; border: 1px solid var(--line);
+    border-radius: 7px; padding: 4px 11px; cursor: pointer;
+  }
+  .band-toggle:hover { color: var(--ink); border-color: var(--muted); }
+  .band-toggle[aria-expanded="true"] {
+    color: var(--ink); border-color: var(--muted); background: var(--raised);
+  }
+
   .awpick {
     padding: 10px 20px 12px; border-bottom: 1px solid var(--line);
     background: rgba(111,168,255,.05);
@@ -495,7 +521,11 @@ TEMPLATE = r"""<!DOCTYPE html>
   .note-toggle:hover { color: var(--ink); border-color: var(--muted); }
 
   @media (max-width: 640px) {
-    .masthead { padding: 8px 14px 0; }
+    .masthead { padding: 5px 14px; }
+    .tabbar { padding: 0 14px; }
+    .scopebar { padding: 8px 14px 0; }
+    /* iOS は 16px 未満の入力欄でフォーカス時に拡大するので、モバイルは 16px を保つ */
+    .search { font-size: 16px; padding: 8px 14px 8px 36px; }
     .pagehead { padding: 12px 14px 8px; }
     .filters { padding: 0 14px; }
     .notepanel { padding: 12px 14px; }
@@ -506,6 +536,7 @@ TEMPLATE = r"""<!DOCTYPE html>
     .search { font-size: 16px; }
     .tabs button { flex: 1; padding: 10px 6px; font-size: 13px; }
     .mycats { padding: 9px 14px; }
+    .bandhead { padding: 6px 14px 0; }
     .awgrp { flex-direction: column; gap: 2px; }
     .awgrp-label { flex: none; text-align: left; line-height: 1.4; }
     #mcName, #mcPattern { flex: 1 1 100%; width: auto; }
@@ -525,20 +556,31 @@ TEMPLATE = r"""<!DOCTYPE html>
   <button class="note-toggle" id="noteToggle" type="button">この表の見かた</button>
 </div>
 
-<header class="masthead">
+<div class="tabbar">
   <div class="tabs" role="tablist" id="tabs">
     <button role="tab" data-tab="chars" aria-selected="true">キャラ<span class="n" id="nChars">–</span></button>
     <button role="tab" data-tab="active" aria-selected="false">アクティブスキル<span class="n" id="nActive">–</span></button>
     <button role="tab" data-tab="leader" aria-selected="false">リーダースキル<span class="n" id="nLeader">–</span></button>
   </div>
+</div>
 
+<header class="masthead">
   <div class="search-wrap">
     <span class="search-icon">◍</span>
     <input id="q" class="search" type="search" autocomplete="off" spellcheck="false"
            placeholder="スキル文・スキル名・キャラ名で検索（数字だけなら図鑑番号／スキルID）">
   </div>
-
 </header>
+
+<div class="scopebar" id="scopeBar" hidden>
+  <span class="group-label">検索対象</span>
+  <div class="seg" id="scopeSeg">
+    <button data-scope="all" aria-pressed="true">すべて</button>
+    <button data-scope="name" aria-pressed="false">キャラ名</button>
+    <button data-scope="active" aria-pressed="false">アクティブ</button>
+    <button data-scope="leader" aria-pressed="false">リーダー</button>
+  </div>
+</div>
 
 <div class="filters">
   <div class="controls">
@@ -557,10 +599,6 @@ TEMPLATE = r"""<!DOCTYPE html>
     <div class="group typeGroup" id="typeGroup">
       <span class="group-label">タイプ</span>
       <div class="types" id="types"></div>
-    </div>
-
-    <div class="group" id="awPickGroup">
-      <button class="btn" id="awPickToggle" type="button">覚醒で絞る</button>
     </div>
 
     <div class="group" id="assistGroup">
@@ -596,7 +634,6 @@ TEMPLATE = r"""<!DOCTYPE html>
 
     <span class="group-label" id="hits">–</span>
     <button class="btn" id="reset">条件をクリア</button>
-    <button class="btn" id="toggleCats">カテゴリを広げる</button>
   </div>
 </div>
 
@@ -622,6 +659,10 @@ TEMPLATE = r"""<!DOCTYPE html>
   </dl>
 </div>
 
+<div class="bandhead" id="awPickGroup">
+  <button class="band-toggle" id="awPickToggle" type="button" aria-expanded="false">覚醒で絞る</button>
+</div>
+
 <div class="awpick" id="awpick" hidden>
   <div class="awpick-head">
     <input id="awFilter" type="search" autocomplete="off" placeholder="覚醒名で絞り込む">
@@ -629,6 +670,10 @@ TEMPLATE = r"""<!DOCTYPE html>
     <button class="btn" id="awPickClear" type="button">覚醒の選択を解除</button>
   </div>
   <div class="awpick-list" id="awpickList"></div>
+</div>
+
+<div class="bandhead" id="catsHead">
+  <button class="band-toggle" id="toggleCats" type="button" aria-expanded="false">カテゴリを広げる</button>
 </div>
 
 <div class="cats" id="cats"></div>
@@ -710,7 +755,7 @@ TEMPLATE = r"""<!DOCTYPE html>
   var S = {
     active: { q:"", attrs:[], types:[], cats:[], my:[], aw:[], cdMax:30, assist:"any", sort:"newest" },
     leader: { q:"", attrs:[], types:[], cats:[], my:[], aw:[], multMin:0, assist:"any", sort:"newest" },
-    chars:  { q:"", attrs:[], types:[], cats:[], my:[], aw:[], cdMax:30, multMin:0,
+    chars:  { q:"", scope:"all", attrs:[], types:[], cats:[], my:[], aw:[], cdMax:30, multMin:0,
               assist:"any", sort:"newest" }
   };
 
@@ -718,8 +763,8 @@ TEMPLATE = r"""<!DOCTYPE html>
   ["q","cats","scroller","viewport","state","stamp","hits","sort",
    "cdMax","cdOut","multMin","multOut","cdGroup","multGroup",
    "nActive","nLeader","toggleCats",
-   "notePanel","noteToggle","assistGroup","nChars","types","typeGroup",
-   "awpick","awpickList","awFilter","awPickToggle","awPickClear","awPickGroup",
+   "notePanel","noteToggle","assistGroup","nChars","types","typeGroup","scopeBar",
+   "awpick","awpickList","awFilter","awPickToggle","awPickClear","awPickGroup","catsHead",
    "mycatChips","mcAdd","mcForm","mcName","mcPattern","mcScope","mcPreview",
    "mcSave","mcCancel","mcHint","mcIo","mcIoToggle","mcJson","mcLoad"].forEach(function (id) {
     el[id] = document.getElementById(id);
@@ -1028,13 +1073,20 @@ TEMPLATE = r"""<!DOCTYPE html>
     }).sort(function (x, y) { return y[0] - x[0]; });
   }
 
+  function skillMatchesText(row, q) {
+    if (!row) return false;
+    // [2]説明文 [11]角括弧を外した説明文 [1]スキル名
+    return row[2].indexOf(q) !== -1 || row[11].indexOf(q) !== -1 || row[1].indexOf(q) !== -1;
+  }
+
   function charMatchesText(r, q) {
+    var scope = S.chars.scope;
+    if (scope === "name") return r[1].indexOf(q) !== -1;
+    if (scope === "active") return skillMatchesText(r[5] >= 0 ? DATA.active[r[5]] : null, q);
+    if (scope === "leader") return skillMatchesText(r[6] >= 0 ? DATA.leader[r[6]] : null, q);
     if (r[1].indexOf(q) !== -1) return true;
-    var a = r[5] >= 0 ? DATA.active[r[5]] : null;
-    if (a && (a[2].indexOf(q) !== -1 || a[11].indexOf(q) !== -1 || a[1].indexOf(q) !== -1)) return true;
-    var l = r[6] >= 0 ? DATA.leader[r[6]] : null;
-    if (l && (l[2].indexOf(q) !== -1 || l[11].indexOf(q) !== -1 || l[1].indexOf(q) !== -1)) return true;
-    return false;
+    return skillMatchesText(r[5] >= 0 ? DATA.active[r[5]] : null, q) ||
+           skillMatchesText(r[6] >= 0 ? DATA.leader[r[6]] : null, q);
   }
 
   function applyChars() {
@@ -1551,6 +1603,13 @@ TEMPLATE = r"""<!DOCTYPE html>
     el.multGroup.hidden = !(tab === "leader" || isChars);
     el.toggleCats.textContent = el.cats.classList.contains("is-open")
       ? "カテゴリを畳む" : "カテゴリを広げる";
+    el.catsHead.hidden = el.cats.hidden;
+    el.scopeBar.hidden = !isChars;
+    if (isChars) {
+      [].forEach.call(document.querySelectorAll("#scopeSeg button"), function (x) {
+        x.setAttribute("aria-pressed", String(x.dataset.scope === s.scope));
+      });
+    }
     el.q.placeholder = isChars
       ? "キャラ名・スキル文・スキル名で検索（数字だけなら図鑑番号）"
       : "スキル文・スキル名・キャラ名で検索（数字だけなら図鑑番号／スキルID）";
@@ -1687,6 +1746,15 @@ TEMPLATE = r"""<!DOCTYPE html>
     saveMy(); renderMyCats(); apply();
   });
 
+  document.getElementById("scopeSeg").addEventListener("click", function (e) {
+    var b = e.target.closest("button"); if (!b) return;
+    [].forEach.call(this.querySelectorAll("button"), function (x) {
+      x.setAttribute("aria-pressed", String(x === b));
+    });
+    S.chars.scope = b.dataset.scope;
+    apply();
+  });
+
   el.types.addEventListener("click", function (e) {
     if (e.target.closest(".type-more")) {
       el.types.classList.toggle("is-open");
@@ -1703,6 +1771,7 @@ TEMPLATE = r"""<!DOCTYPE html>
 
   el.awPickToggle.addEventListener("click", function (e) {
     el.awpick.hidden = !el.awpick.hidden;
+    el.awPickToggle.setAttribute("aria-expanded", String(!el.awpick.hidden));
     if (!el.awpick.hidden) {
       renderAwPick();
       if (!cameFromTouch(e)) el.awFilter.focus();
@@ -1765,8 +1834,8 @@ TEMPLATE = r"""<!DOCTYPE html>
   });
 
   document.getElementById("reset").addEventListener("click", function () {
-    if (tab === "chars") S.chars = { q:"", attrs:[], types:[], cats:[], my:[], aw:[], cdMax:30,
-                                     multMin:0, assist:"any", sort:"newest" };
+    if (tab === "chars") S.chars = { q:"", scope:"all", attrs:[], types:[], cats:[], my:[], aw:[],
+                                     cdMax:30, multMin:0, assist:"any", sort:"newest" };
     else if (tab === "active") S.active = { q:"", attrs:[], types:[], cats:[], my:[], aw:[], cdMax:30, assist:"any", sort:"newest" };
     else S.leader = { q:"", attrs:[], types:[], cats:[], my:[], aw:[], multMin:0, assist:"any", sort:"newest" };
     syncControls();
@@ -1784,7 +1853,9 @@ TEMPLATE = r"""<!DOCTYPE html>
   });
 
   el.toggleCats.addEventListener("click", function () {
-    this.textContent = el.cats.classList.toggle("is-open") ? "カテゴリを畳む" : "カテゴリを広げる";
+    var open = el.cats.classList.toggle("is-open");
+    this.textContent = open ? "カテゴリを畳む" : "カテゴリを広げる";
+    this.setAttribute("aria-expanded", String(open));
   });
 
   window.addEventListener("scroll", function () {
