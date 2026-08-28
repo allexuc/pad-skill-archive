@@ -53,11 +53,15 @@ AWAKENING_GROUPS = [
     ("回復・軽減",     r"回復$|ダメージ軽減$"
                       r"|^お邪魔ドロップの加護$|^毒ドロップの加護$"),
     # 単体で立たない常時効果はステータス強化に寄せる。
-    ("ステータス強化", r"強化$|弱化$|アシスト共鳴"
+    # ソウル系は全パラメータ強化の上位互換なのでここに寄せる
+    ("ステータス強化", r"強化$|弱化$|アシスト共鳴|ソウル$"
                       r"|^浮遊$|^陽の加護$|^陰の加護$|^熟成$"
                       r"|^アフタヌーンティー$|^自力$|^加速$"),
     ("その他",         r""),
 ]
+
+# 名前が判明していない覚醒の置き場。名前表に載る前でも画面から消えないようにする。
+UNKNOWN_GROUP = "新規・未確認"
 
 # 属性コード。mon_ja.json の attrs / 既知モンスターで検証済み
 ATTR_NAMES = {0: "火", 1: "水", 2: "木", 3: "光", 4: "闇"}
@@ -248,10 +252,22 @@ def base_name(name):
     return re.sub(r"[＋+]+$", "", name)
 
 
-def group_awakenings(aw_names, aw_count):
-    """覚醒を名前で束ねて、グループの順・基本名・IDの順に並べる。"""
+def group_awakenings(aw_names, used_ids=None):
+    """覚醒を名前で束ねて、グループの順・基本名・IDの順に並べる。
+
+    used_ids に実データで使われているIDを渡すと、名前表に無いものを
+    「新規・未確認」として拾う。ゲーム側に覚醒が追加されたとき、
+    名前を足すまで画面から消えてしまうのを防ぐため。
+    """
     buckets = {label: [] for label, _ in AWAKENING_GROUPS}
+    buckets[UNKNOWN_GROUP] = []
+
+    for aid in sorted(set(used_ids or []) - set(aw_names)):
+        buckets[UNKNOWN_GROUP].append((f"#{aid}", aid, ""))
+
     for aid, name in aw_names.items():
+        if used_ids is not None and aid not in used_ids:
+            continue
         base = base_name(name)
         for label, pattern in AWAKENING_GROUPS:
             if not pattern or re.search(pattern, base):
@@ -266,7 +282,7 @@ def group_awakenings(aw_names, aw_count):
             base_first[base] = aid
 
     out = []
-    for label, _ in AWAKENING_GROUPS:
+    for label in [l for l, _ in AWAKENING_GROUPS] + [UNKNOWN_GROUP]:
         items = sorted(buckets[label], key=lambda x: (base_first[x[0]], x[1]))
         if items:
             out.append([label, [aid for _, aid, _ in items]])
@@ -383,6 +399,8 @@ def build_sqlite(rows, mons, aw_names, out_path):
 
 
 def build_json(rows, mons, aw_names, out_path):
+    used_ids = {a for m in mons.values()
+                for a in (m.get("awakenings", []) + m.get("super", []))}
     assist_id = find_assist_awakening_id(aw_names)
     assist_ids = sorted(
         m["id"] for m in mons.values()
@@ -419,11 +437,12 @@ def build_json(rows, mons, aw_names, out_path):
                     m.get("awakenings", []), m.get("super", [])]
                    for m in sorted(mons.values(), key=lambda x: -x["id"])
                    if m.get("awakenings") or m.get("super")],
-        "awnames": {str(k): v for k, v in sorted(aw_names.items())},
+        "awnames": {str(k): aw_names.get(k, "")
+                    for k in sorted(set(aw_names) | used_ids)},
         # 覚醒アシスト持ちの図鑑番号。スキル側の絞り込みと所持キャラの印に使う。
         "assist": assist_ids,
         # 覚醒の表示順。[[グループ名, [覚醒ID...]], ...]
-        "awgroups": group_awakenings(aw_names, None),
+        "awgroups": group_awakenings(aw_names, used_ids),
     }
     blob = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     # mtime を固定しないと中身が同じでも毎回バイト列が変わり、
@@ -455,8 +474,14 @@ def main():
     aw_names = load_awakening_names(Path("awakening_names.json"))
     if not aw_names:
         aw_names = load_awakening_names(out_dir / "awakening_names.json")
-    named = sum(1 for v in aw_names.values() if v)
-    print(f"覚醒 {len(aw_names):,} 種 / 名前あり {named:,} / 名前なし {len(aw_names)-named:,}")
+    used_ids = {a for m in mons.values()
+                for a in (m.get("awakenings", []) + m.get("super", []))}
+    missing = sorted(used_ids - set(aw_names))
+    print(f"覚醒 {len(used_ids):,} 種が使用中 / 名前表 {len(aw_names):,} 件")
+    if missing:
+        print(f"  名前が未登録: {missing}")
+        print("  → awakening_names.json に追記すると名前と分類が付きます"
+              "（未登録の間は「新規・未確認」に入ります）")
     aid = find_assist_awakening_id(aw_names)
     if aid:
         n = sum(1 for m in mons.values()
